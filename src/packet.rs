@@ -4,12 +4,18 @@ use std::io::Read;
 
 use crate::error::RconError;
 
+/// Indicates the purpose of a packet.
 #[derive(Copy, Clone, Debug, PartialEq)]
-enum PacketType {
+pub enum PacketType {
+    /// Represents an authentication request to the server.
     Auth,
+    /// Represents a notification of the connection's current auth status.
     AuthResponse,
+    /// Represents a command issued to the server by a client.
     ExecCommand,
+    /// Represents a response to an [`ExecCommand`].
     ResponseValue,
+    /// Represents an unknown packet type.
     Unknown(i32),
 }
 
