@@ -41,11 +41,11 @@ impl PacketType {
 }
 
 #[derive(Debug, PartialEq)]
-struct Packet {
+pub struct Packet {
     size: i32,
-    id: i32,
-    ptype: PacketType,
-    body: String,
+    pub id: i32,
+    pub ptype: PacketType,
+    pub body: String,
 }
 
 impl Packet {
@@ -68,7 +68,7 @@ impl Packet {
         buf
     }
 
-    pub fn deserialize(mut buf: &[u8]) -> Result<Self, RconError> {
+    pub fn deserialize(mut buf: impl Read) -> Result<Self, RconError> {
         // Read i32 packet fields.
         let mut field_buf = [0u8; 4]; // tmp buffer for i32 packet fields
         buf.read_exact(&mut field_buf)?;
@@ -102,6 +102,8 @@ impl Packet {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use super::*;
 
     #[test]
@@ -120,8 +122,10 @@ mod tests {
     fn deserialize_auth_response() {
         // id == 0 in AuthResponse indicates authn success
         let expected = Packet::new(0, PacketType::AuthResponse, "".into());
-        let mut data = [10, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0];
-        let packet = Packet::deserialize(&mut data).unwrap();
+        let data = [10, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0];
+
+        // Use a `Cursor` to fulfill the `Read` trait boundary on an array.
+        let packet = Packet::deserialize(Cursor::new(data)).unwrap();
 
         let buf = expected.serialize();
         print_buffer_hex(&buf);

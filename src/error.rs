@@ -8,4 +8,6 @@ pub enum RconError {
     IO(#[from] std::io::Error),
     #[error("invalid data")]
     InvalidData(#[from] std::string::FromUtf8Error),
+    #[error("authentication failed")]
+    AuthFailure,
 }
