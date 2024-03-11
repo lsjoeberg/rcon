@@ -1,6 +1,5 @@
-#![allow(dead_code)]
-
-use std::io::Read;
+use std::cmp::Ordering;
+use std::io::{Read, Write};
 
 use crate::error::RconError;
 

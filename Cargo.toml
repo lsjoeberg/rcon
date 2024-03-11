@@ -7,6 +7,14 @@ edition = "2021"
 
 [dependencies]
 thiserror = "1.0.57"
+clap = { version = "4.5.2", optional = true, features = ["derive", "env"] }
+
+[features]
+cli = ["dep:clap"]
+
+[[bin]]
+name = "rcon"
+required-features = ["cli"]
 
 [profile.release]
 strip = true
