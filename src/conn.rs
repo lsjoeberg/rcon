@@ -1,4 +1,3 @@
-use std::io::Write;
 use std::net::{TcpStream, ToSocketAddrs};
 
 use crate::error::RconError;
@@ -25,7 +24,7 @@ impl Connection {
 
         // Receive `AuthResponse`.
         let auth_response = loop {
-            let r = Packet::deserialize(&self.stream)?;
+            let r = Packet::deserialize(&mut self.stream)?;
             if r.ptype == PacketType::AuthResponse {
                 break r;
             }
@@ -51,8 +50,7 @@ impl Connection {
     fn send(&mut self, ptype: PacketType, body: &str) -> Result<i32, RconError> {
         let id = self.fetch_and_add_id();
         let packet = Packet::new(id, ptype, body.into());
-        let data = packet.serialize();
-        self.stream.write_all(&data)?;
+        packet.serialize(&mut self.stream)?;
         Ok(id)
     }
 
@@ -64,7 +62,7 @@ impl Connection {
         let end_id = self.send(PacketType::ExecCommand, "")?; // empty packet
         let mut response = String::new();
         loop {
-            let recv_packet = Packet::deserialize(&self.stream)?;
+            let recv_packet = Packet::deserialize(&mut self.stream)?;
             if recv_packet.id == end_id {
                 break;
             }

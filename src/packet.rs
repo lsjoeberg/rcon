@@ -57,35 +57,36 @@ impl Packet {
         }
     }
 
-    pub fn serialize(&self) -> Vec<u8> {
+    pub fn serialize(&self, w: &mut impl Write) -> Result<(), RconError> {
         let mut buf: Vec<u8> = Vec::with_capacity(self.size as usize);
         buf.extend_from_slice(&self.size.to_le_bytes());
         buf.extend_from_slice(&self.id.to_le_bytes());
         buf.extend_from_slice(&self.ptype.into_i32().to_le_bytes());
         buf.extend_from_slice(self.body.as_bytes());
         buf.extend_from_slice(&[0x00, 0x00]); // empty string and null terminator
-        buf
+        w.write_all(&buf)?;
+        Ok(())
     }
 
-    pub fn deserialize(mut buf: impl Read) -> Result<Self, RconError> {
+    pub fn deserialize(r: &mut impl Read) -> Result<Self, RconError> {
         // Read i32 packet fields.
         let mut field_buf = [0u8; 4]; // tmp buffer for i32 packet fields
-        buf.read_exact(&mut field_buf)?;
+        r.read_exact(&mut field_buf)?;
         let size = i32::from_le_bytes(field_buf);
-        buf.read_exact(&mut field_buf)?;
+        r.read_exact(&mut field_buf)?;
         let id = i32::from_le_bytes(field_buf);
-        buf.read_exact(&mut field_buf)?;
+        r.read_exact(&mut field_buf)?;
         let ptype_raw = i32::from_le_bytes(field_buf);
 
         // TODO: Validate size!
         let body_len = size - 10;
         let mut body_buf = vec![0u8; body_len as usize];
-        buf.read_exact(&mut body_buf)?;
+        r.read_exact(&mut body_buf)?;
         let body = String::from_utf8(body_buf)?;
 
         // Read terminating bytes.
         let mut term_buf = [0u8; 2];
-        buf.read_exact(&mut term_buf)?;
+        r.read_exact(&mut term_buf)?;
         // TODO: Verify that bytes are zero?
 
         // Note: Deserialized packets will always be `is_response`. The tag `2` is shared between
@@ -111,10 +112,11 @@ mod tests {
             17, 0, 0, 0, 1, 0, 0, 0, 3, 0, 0, 0, 112, 97, 115, 115, 119, 114, 100, 0, 0,
         ];
         let p = Packet::new(1, PacketType::Auth, "passwrd".into());
-        let buf = p.serialize();
+        let mut buf = Vec::new();
+        p.serialize(&mut buf).unwrap();
         print_buffer_hex(&buf);
 
-        assert_eq!(buf.as_slice(), expected);
+        assert_eq!(buf, expected);
     }
 
     #[test]
@@ -124,9 +126,10 @@ mod tests {
         let data = [10, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0];
 
         // Use a `Cursor` to fulfill the `Read` trait boundary on an array.
-        let packet = Packet::deserialize(Cursor::new(data)).unwrap();
+        let packet = Packet::deserialize(&mut Cursor::new(data)).unwrap();
 
-        let buf = expected.serialize();
+        let mut buf = Vec::new();
+        expected.serialize(&mut buf).unwrap();
         print_buffer_hex(&buf);
 
         assert_eq!(packet, expected)
