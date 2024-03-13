@@ -93,7 +93,9 @@ impl Packet {
         // Read terminating bytes.
         let mut term_buf = [0u8; 2];
         r.read_exact(&mut term_buf)?;
-        // TODO: Verify that bytes are zero?
+        if term_buf[0] != 0 || term_buf[1] != 0 {
+            return Err(RconError::InvalidPacket);
+        }
 
         // Note: Deserialized packets will always be `is_response`. The tag `2` is shared between
         // `ExecCommand` (req) and `AuthResponse` (resp), and only the latter is relevant here.
