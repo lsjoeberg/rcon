@@ -3,6 +3,10 @@ use std::io::{Read, Write};
 
 use crate::error::RconError;
 
+const PACKET_HEADER_SIZE: i32 = 8;
+const PACKET_PADDING_SIZE: i32 = 2;
+const MIN_PACKET_SIZE: i32 = PACKET_HEADER_SIZE + PACKET_PADDING_SIZE;
+
 /// Indicates the purpose of a packet.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum PacketType {
@@ -50,7 +54,7 @@ pub struct Packet {
 impl Packet {
     pub fn new(id: i32, ptype: PacketType, body: String) -> Self {
         Self {
-            size: 10 + body.len() as i32,
+            size: MIN_PACKET_SIZE + body.len() as i32,
             id,
             ptype,
             body,
@@ -79,7 +83,7 @@ impl Packet {
         let ptype_raw = i32::from_le_bytes(field_buf);
 
         // Read body.
-        let body_len = size - 10;
+        let body_len = size - MIN_PACKET_SIZE;
         let body = match body_len.cmp(&0) {
             Ordering::Greater => {
                 let mut body_buf = vec![0u8; body_len as usize];
@@ -105,6 +109,10 @@ impl Packet {
             ptype: PacketType::from_i32(ptype_raw, true),
             body,
         })
+    }
+
+    pub fn is_error(&self) -> bool {
+        self.id < 0
     }
 }
 

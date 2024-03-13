@@ -30,9 +30,8 @@ impl Connection {
             }
         };
 
-        // If authentication was successful, the ID is the request ID.
-        // If authentication failed, the ID is -1.
-        if auth_response.id == -1 {
+        // Check if authentication was successful.
+        if auth_response.is_error() {
             return Err(RconError::AuthFailure);
         }
 
