@@ -78,11 +78,17 @@ impl Packet {
         r.read_exact(&mut field_buf)?;
         let ptype_raw = i32::from_le_bytes(field_buf);
 
-        // TODO: Validate size!
+        // Read body.
         let body_len = size - 10;
-        let mut body_buf = vec![0u8; body_len as usize];
-        r.read_exact(&mut body_buf)?;
-        let body = String::from_utf8(body_buf)?;
+        let body = match body_len.cmp(&0) {
+            Ordering::Greater => {
+                let mut body_buf = vec![0u8; body_len as usize];
+                r.read_exact(&mut body_buf)?;
+                String::from_utf8(body_buf)?
+            }
+            Ordering::Equal => String::new(),
+            Ordering::Less => return Err(RconError::InvalidPacket),
+        };
 
         // Read terminating bytes.
         let mut term_buf = [0u8; 2];
