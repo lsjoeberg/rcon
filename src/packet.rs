@@ -7,38 +7,71 @@ const PACKET_HEADER_SIZE: i32 = 8;
 const PACKET_PADDING_SIZE: i32 = 2;
 const MIN_PACKET_SIZE: i32 = PACKET_HEADER_SIZE + PACKET_PADDING_SIZE;
 
-/// Indicates the purpose of a packet.
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum PacketType {
-    /// Represents an authentication request to the server.
-    Auth,
-    /// Represents a notification of the connection's current auth status.
-    AuthResponse,
-    /// Represents a command issued to the server by a client.
+pub enum RconReq {
     ExecCommand,
-    /// Represents a response to an [`ExecCommand`].
-    ResponseValue,
-    /// Represents an unknown packet type.
+    Auth,
     Unknown(i32),
 }
 
-impl PacketType {
-    fn from_i32(value: i32, is_response: bool) -> Self {
+impl From<i32> for RconReq {
+    fn from(value: i32) -> Self {
         match value {
-            3 => Self::Auth,
-            2 if is_response => Self::AuthResponse,
             2 => Self::ExecCommand,
-            0 => Self::ResponseValue,
+            3 => Self::Auth,
             _ => Self::Unknown(value),
         }
     }
+}
 
-    fn into_i32(self) -> i32 {
-        match self {
-            PacketType::Auth => 3,
-            PacketType::AuthResponse | PacketType::ExecCommand => 2,
-            PacketType::ResponseValue => 0,
-            PacketType::Unknown(n) => n,
+impl From<RconReq> for i32 {
+    fn from(value: RconReq) -> Self {
+        match value {
+            RconReq::ExecCommand => 2,
+            RconReq::Auth => 3,
+            RconReq::Unknown(v) => v,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum RconResp {
+    ResponseValue,
+    AuthResponse,
+    Unknown(i32),
+}
+
+impl From<i32> for RconResp {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => Self::ResponseValue,
+            2 => Self::AuthResponse,
+            _ => Self::Unknown(value),
+        }
+    }
+}
+
+impl From<RconResp> for i32 {
+    fn from(value: RconResp) -> Self {
+        match value {
+            RconResp::ResponseValue => 0,
+            RconResp::AuthResponse => 2,
+            RconResp::Unknown(v) => v,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum MsgType {
+    Request(RconReq),
+    Response(RconResp),
+}
+
+impl From<MsgType> for i32 {
+    fn from(value: MsgType) -> Self {
+        match value {
+            MsgType::Request(v) => v.into(),
+            MsgType::Response(v) => v.into(),
         }
     }
 }
@@ -47,12 +80,12 @@ impl PacketType {
 pub struct Packet {
     size: i32,
     pub id: i32,
-    pub ptype: PacketType,
+    pub ptype: MsgType,
     pub body: String,
 }
 
 impl Packet {
-    pub fn new(id: i32, ptype: PacketType, body: String) -> Self {
+    pub fn new(id: i32, ptype: MsgType, body: String) -> Self {
         Self {
             size: MIN_PACKET_SIZE + body.len() as i32,
             id,
@@ -63,9 +96,13 @@ impl Packet {
 
     pub fn serialize(&self, w: &mut impl Write) -> Result<(), RconError> {
         let mut buf: Vec<u8> = Vec::with_capacity(self.size as usize);
+
         buf.extend_from_slice(&self.size.to_le_bytes());
         buf.extend_from_slice(&self.id.to_le_bytes());
-        buf.extend_from_slice(&self.ptype.into_i32().to_le_bytes());
+
+        let ptype_raw: i32 = self.ptype.into();
+
+        buf.extend_from_slice(&ptype_raw.to_le_bytes());
         buf.extend_from_slice(self.body.as_bytes());
         buf.extend_from_slice(&[0x00, 0x00]); // empty string and null terminator
         w.write_all(&buf)?;
@@ -101,12 +138,13 @@ impl Packet {
             return Err(RconError::InvalidPacket);
         }
 
-        // Note: Deserialized packets will always be `is_response`. The tag `2` is shared between
-        // `ExecCommand` (req) and `AuthResponse` (resp), and only the latter is relevant here.
+        // Note: Deserialized packets will always be response messages. The tag
+        // `2` is shared between `ExecCommand` (req) and `AuthResponse (resp),
+        // and only the latter is relevant here.
         Ok(Self {
             size,
             id,
-            ptype: PacketType::from_i32(ptype_raw, true),
+            ptype: MsgType::Response(RconResp::from(ptype_raw)),
             body,
         })
     }
@@ -127,7 +165,7 @@ mod tests {
         let expected = [
             17, 0, 0, 0, 1, 0, 0, 0, 3, 0, 0, 0, 112, 97, 115, 115, 119, 114, 100, 0, 0,
         ];
-        let p = Packet::new(1, PacketType::Auth, "passwrd".into());
+        let p = Packet::new(1, MsgType::Request(RconReq::Auth), "passwrd".into());
         let mut buf = Vec::new();
         p.serialize(&mut buf).unwrap();
         print_buffer_hex(&buf);
@@ -138,7 +176,7 @@ mod tests {
     #[test]
     fn deserialize_auth_response() {
         // id == 0 in AuthResponse indicates authn success
-        let expected = Packet::new(0, PacketType::AuthResponse, "".into());
+        let expected = Packet::new(0, MsgType::Response(RconResp::AuthResponse), "".into());
         let data = [10, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0];
 
         // Use a `Cursor` to fulfill the `Read` trait boundary on an array.
