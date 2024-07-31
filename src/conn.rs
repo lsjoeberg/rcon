@@ -1,7 +1,7 @@
 use std::net::{TcpStream, ToSocketAddrs};
 
 use crate::error::RconError;
-use crate::packet::{MsgType, Packet, RconReq, RconResp};
+use crate::packet::{MsgType, Packet, RconReq, RconResp, MAX_CMD_SIZE};
 
 pub struct Connection {
     stream: TcpStream,
@@ -39,16 +39,22 @@ impl Connection {
     }
 
     pub fn exec(&mut self, cmd: &str) -> Result<String, RconError> {
-        // Note: A server responds with one or more `ResponseValue`.
-        // The max packet size is 4096 (default), but may differ between game servers.
+        // Note: The client-to-server max payload is sometimes limited; for
+        // Minecraft this is 1446 bytes.
+        if cmd.len() > MAX_CMD_SIZE {
+            return Err(RconError::CmdTooLong(cmd.len()));
+        }
+
+        // A server responds with one or more `ResponseValue`.
         self.send(RconReq::ExecCommand, cmd)?;
         let response = self.recv_multi_packet_response()?;
+
         Ok(response)
     }
 
     fn send(&mut self, request: RconReq, body: &str) -> Result<i32, RconError> {
         let id = self.fetch_and_add_id();
-        let packet = Packet::new(id, MsgType::Request(request), body.into());
+        let packet = Packet::new(id, MsgType::Request(request), body.into())?;
         packet.serialize(&mut self.stream)?;
         Ok(id)
     }
