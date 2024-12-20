@@ -108,7 +108,9 @@ impl Packet {
         if !(MIN_PACKET_SIZE..=MAX_PACKET_SIZE).contains(&self.size) {
             return Err(Error::InvalidPacketSize(self.size));
         }
-        let size_raw = self.size as i32; // conversion ok after size check
+        let Ok(size_raw) = i32::try_from(self.size) else {
+            return Err(Error::InvalidPacketSize(self.size));
+        };
 
         let mut buf: Vec<u8> = Vec::with_capacity(self.size);
         buf.extend_from_slice(&size_raw.to_le_bytes());
