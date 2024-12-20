@@ -1,9 +1,7 @@
-use thiserror::Error;
-
 use crate::packet::{MAX_CMD_SIZE, MAX_PACKET_SIZE, MAX_PAYLOAD_SIZE, MIN_PACKET_SIZE};
 
-#[derive(Error, Debug)]
-pub enum RconError {
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
     #[error("bad packet from server")]
     BadResponsePacket,
 

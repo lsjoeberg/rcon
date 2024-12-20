@@ -1,6 +1,6 @@
 use std::net::{TcpStream, ToSocketAddrs};
 
-use crate::error::RconError;
+use crate::error::Error;
 use crate::packet::{MsgType, Packet, RconReq, RconResp, MAX_CMD_SIZE};
 
 pub struct Connection {
@@ -11,14 +11,14 @@ pub struct Connection {
 impl Connection {
     /// # Errors
     /// Will return `Err` if a TCP connection cannot be established, or if authentication fails.
-    pub fn connect(addr: impl ToSocketAddrs, password: &str) -> Result<Connection, RconError> {
+    pub fn connect(addr: impl ToSocketAddrs, password: &str) -> Result<Connection, Error> {
         let stream = TcpStream::connect(addr)?;
         let mut conn = Connection { stream, next_id: 0 };
         conn.auth(password)?;
         Ok(conn)
     }
 
-    fn auth(&mut self, password: &str) -> Result<(), RconError> {
+    fn auth(&mut self, password: &str) -> Result<(), Error> {
         // Note: A server responds with an empty `ResponseValue` followed by an `AuthResponse`.
         // The server uses the `AuthResponse` packet ID as status code, so the response ID should
         // be paired with the `ResponseValue` packet.
@@ -34,7 +34,7 @@ impl Connection {
 
         // Check if authentication was successful.
         if auth_response.is_error() {
-            return Err(RconError::AuthFailure);
+            return Err(Error::AuthFailure);
         }
 
         Ok(())
@@ -43,11 +43,11 @@ impl Connection {
     /// # Errors
     /// Will return `Err` if `cmd` is larger than [`MAX_CMD_SIZE`] bytes, or if the bytes cannot be
     /// written to the TCP socket.
-    pub fn exec(&mut self, cmd: &str) -> Result<String, RconError> {
+    pub fn exec(&mut self, cmd: &str) -> Result<String, Error> {
         // Note: The client-to-server max payload is sometimes limited; for
         // Minecraft this is 1446 bytes.
         if cmd.len() > MAX_CMD_SIZE {
-            return Err(RconError::CmdTooLong(cmd.len()));
+            return Err(Error::CmdTooLong(cmd.len()));
         }
 
         // A server responds with one or more `ResponseValue`.
@@ -57,14 +57,14 @@ impl Connection {
         Ok(response)
     }
 
-    fn send(&mut self, request: RconReq, body: &str) -> Result<i32, RconError> {
+    fn send(&mut self, request: RconReq, body: &str) -> Result<i32, Error> {
         let id = self.fetch_and_add_id();
         let packet = Packet::new(id, MsgType::Request(request), body.into())?;
         packet.serialize(&mut self.stream)?;
         Ok(id)
     }
 
-    fn recv_multi_packet_response(&mut self) -> Result<String, RconError> {
+    fn recv_multi_packet_response(&mut self) -> Result<String, Error> {
         // Send an empty ExecCommand packet, just after the actual client request packet.
         // Since the server always responds to requests in the receiving order (FIFO), we
         // can detect the end of a multi-packet response when receiving the response to the
