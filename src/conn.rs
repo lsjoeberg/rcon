@@ -11,10 +11,10 @@ pub struct Connection {
 impl Connection {
     /// # Errors
     /// Will return `Err` if a TCP connection cannot be established, or if authentication fails.
-    pub fn connect(addr: impl ToSocketAddrs, password: &str) -> Result<Connection, Error> {
+    pub fn connect(addr: impl ToSocketAddrs, password: impl AsRef<str>) -> Result<Connection, Error> {
         let stream = TcpStream::connect(addr)?;
         let mut conn = Connection { stream, next_id: 0 };
-        conn.auth(password)?;
+        conn.auth(password.as_ref())?;
         Ok(conn)
     }
 
