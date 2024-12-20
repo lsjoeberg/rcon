@@ -26,8 +26,7 @@ struct Args {
 fn main() -> Result<(), rcon::Error> {
     let args = Args::parse();
 
-    let mut conn =
-        rcon::Connection::connect(format!("{}:{}", args.host, args.port), &args.password)?;
+    let mut conn = rcon::Connection::connect((args.host.as_ref(), args.port), &args.password)?;
 
     if args.terminal {
         run_terminal_mode(conn)?;
