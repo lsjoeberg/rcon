@@ -9,6 +9,8 @@ pub struct Connection {
 }
 
 impl Connection {
+    /// # Errors
+    /// Will return `Err` if a TCP connection cannot be established, or if authentication fails.
     pub fn connect(addr: impl ToSocketAddrs, password: &str) -> Result<Connection, RconError> {
         let stream = TcpStream::connect(addr)?;
         let mut conn = Connection { stream, next_id: 0 };
@@ -38,6 +40,9 @@ impl Connection {
         Ok(())
     }
 
+    /// # Errors
+    /// Will return `Err` if `cmd` is larger than [`MAX_CMD_SIZE`] bytes, or if the bytes cannot be
+    /// written to the TCP socket.
     pub fn exec(&mut self, cmd: &str) -> Result<String, RconError> {
         // Note: The client-to-server max payload is sometimes limited; for
         // Minecraft this is 1446 bytes.
