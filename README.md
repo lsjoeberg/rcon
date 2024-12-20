@@ -10,11 +10,8 @@ The crate can be used a library in other Rust applications, or as a CLI.
 ### Library
 
 ```rust
-use std::error::Error;
-use rcon::Connection;
-
-fn main() -> Result<(), Box<dyn Error>> {
-    let mut conn = Connection::connect("localhost:25575", "password")?;
+fn main() -> Result<(), rcon::Error> {
+    let mut conn = rcon::Connection::connect("localhost:25575", "password")?;
     let response = conn.exec("list")?;
     println!("{response}");
     Ok(())

@@ -2,7 +2,7 @@ use std::io::{self, stdout, Write};
 
 use clap::Parser;
 
-use rcon::{Connection, RconError};
+use rcon;
 
 #[derive(Debug, Parser)]
 struct Args {
@@ -23,10 +23,14 @@ struct Args {
     commands: Vec<String>,
 }
 
-fn main() -> Result<(), RconError> {
-    let args = Args::parse();
+fn main() {
+    if let Err(e) = run(Args::parse()) {
+        eprintln!("error: {}", e.to_string());
+    }
+}
 
-    let mut conn = Connection::connect(format!("{}:{}", args.host, args.port), &args.password)?;
+fn run(args: Args) -> Result<(), rcon::Error> {
+    let mut conn = rcon::Connection::connect((args.host.as_ref(), args.port), &args.password)?;
 
     if args.terminal {
         run_terminal_mode(conn)?;
@@ -38,7 +42,7 @@ fn main() -> Result<(), RconError> {
     Ok(())
 }
 
-fn run_terminal_mode(mut conn: Connection) -> Result<(), RconError> {
+fn run_terminal_mode(mut conn: rcon::Connection) -> Result<(), rcon::Error> {
     println!("Logged in.\nType 'Q' to disconnect.");
 
     let mut input = String::new();

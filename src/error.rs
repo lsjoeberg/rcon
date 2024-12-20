@@ -1,28 +1,26 @@
-use thiserror::Error;
-
 use crate::packet::{MAX_CMD_SIZE, MAX_PACKET_SIZE, MAX_PAYLOAD_SIZE, MIN_PACKET_SIZE};
 
-#[derive(Error, Debug)]
-pub enum RconError {
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
     #[error("bad packet from server")]
     BadResponsePacket,
 
-    #[error("io failure")]
+    #[error(transparent)]
     IO(#[from] std::io::Error),
 
     #[error("invalid data")]
     InvalidData(#[from] std::string::FromUtf8Error),
 
-    #[error("command too long {0} (expected <= {}", MAX_CMD_SIZE)]
+    #[error("command too long {0} (expected <= {hi})", hi=MAX_CMD_SIZE)]
     CmdTooLong(usize),
 
-    #[error("payload too long {0} (expected <= {})", MAX_PAYLOAD_SIZE)]
+    #[error("payload too long {0} (expected <= {hi})", hi=MAX_PAYLOAD_SIZE)]
     PayloadTooLong(usize),
 
     #[error(
-        "invalid packet size {0} (expected <= {} <= {})",
-        MIN_PACKET_SIZE,
-        MAX_PACKET_SIZE
+        "invalid packet size {0} (expected size in [{lo}, {hi}])",
+        lo=MIN_PACKET_SIZE,
+        hi=MAX_PACKET_SIZE
     )]
     InvalidPacketSize(usize),
 

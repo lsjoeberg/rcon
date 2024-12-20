@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::io::{Read, Write};
 
-use crate::error::RconError;
+use crate::error::Error;
 
 const PACKET_HEADER_SIZE: usize = 8;
 const PACKET_PADDING_SIZE: usize = 2;
@@ -88,11 +88,11 @@ pub struct Packet {
 }
 
 impl Packet {
-    pub fn new(id: i32, ptype: MsgType, body: String) -> Result<Self, RconError> {
+    pub fn new(id: i32, ptype: MsgType, body: String) -> Result<Self, Error> {
         // Ensure body fits in an RCON packet.
         let body_len = body.len();
         if body_len >= MAX_PAYLOAD_SIZE {
-            return Err(RconError::PayloadTooLong(body.len()));
+            return Err(Error::PayloadTooLong(body.len()));
         }
 
         Ok(Self {
@@ -103,12 +103,14 @@ impl Packet {
         })
     }
 
-    pub fn serialize(&self, w: &mut impl Write) -> Result<(), RconError> {
+    pub fn serialize(&self, w: &mut impl Write) -> Result<(), Error> {
         // Ensure size is within spec.
         if !(MIN_PACKET_SIZE..=MAX_PACKET_SIZE).contains(&self.size) {
-            return Err(RconError::InvalidPacketSize(self.size));
+            return Err(Error::InvalidPacketSize(self.size));
         }
-        let size_raw = self.size as i32; // conversion ok after size check
+        let Ok(size_raw) = i32::try_from(self.size) else {
+            return Err(Error::InvalidPacketSize(self.size));
+        };
 
         let mut buf: Vec<u8> = Vec::with_capacity(self.size);
         buf.extend_from_slice(&size_raw.to_le_bytes());
@@ -122,7 +124,7 @@ impl Packet {
         Ok(())
     }
 
-    pub fn deserialize(r: &mut impl Read) -> Result<Self, RconError> {
+    pub fn deserialize(r: &mut impl Read) -> Result<Self, Error> {
         // Read i32 packet fields.
         let mut field_buf = [0u8; 4]; // tmp buffer for i32 packet fields
         r.read_exact(&mut field_buf)?;
@@ -134,10 +136,10 @@ impl Packet {
 
         // Ensure size is valid: non-negative and within spec.
         let Ok(size) = usize::try_from(size_raw) else {
-            return Err(RconError::BadResponsePacket);
+            return Err(Error::BadResponsePacket);
         };
         if !(MIN_PACKET_SIZE..=MAX_PACKET_SIZE).contains(&size) {
-            return Err(RconError::InvalidPacketSize(size));
+            return Err(Error::InvalidPacketSize(size));
         }
 
         // Read body.
@@ -149,14 +151,14 @@ impl Packet {
                 String::from_utf8(body_buf)?
             }
             Ordering::Equal => String::new(),
-            Ordering::Less => return Err(RconError::BadResponsePacket),
+            Ordering::Less => return Err(Error::BadResponsePacket),
         };
 
         // Read terminating bytes.
         let mut term_buf = [0u8; 2];
         r.read_exact(&mut term_buf)?;
         if term_buf[0] != 0 || term_buf[1] != 0 {
-            return Err(RconError::BadResponsePacket);
+            return Err(Error::BadResponsePacket);
         }
 
         // Note: Deserialized packets will always be response messages. The tag
@@ -251,7 +253,7 @@ mod tests {
         let data = [9, 0, 0, 0, 42, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         let res = Packet::deserialize(&mut Cursor::new(data));
         assert!(res.is_err());
-        let Err(RconError::InvalidPacketSize(s)) = res else {
+        let Err(Error::InvalidPacketSize(s)) = res else {
             panic!();
         };
         assert_eq!(s, 9);
@@ -264,7 +266,7 @@ mod tests {
         let data = [1, 16, 0, 0, 42, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         let res = Packet::deserialize(&mut Cursor::new(data));
         assert!(res.is_err());
-        let Err(RconError::InvalidPacketSize(s)) = res else {
+        let Err(Error::InvalidPacketSize(s)) = res else {
             panic!();
         };
         assert_eq!(s, 4097);
@@ -281,7 +283,7 @@ mod tests {
         let mut buf = Vec::new();
         let res = packet.serialize(&mut buf);
         assert!(res.is_err());
-        let Err(RconError::InvalidPacketSize(s)) = res else {
+        let Err(Error::InvalidPacketSize(s)) = res else {
             panic!();
         };
         assert_eq!(s, usize::MAX);
