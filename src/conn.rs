@@ -1,7 +1,7 @@
 use std::net::{TcpStream, ToSocketAddrs};
 
 use crate::error::RconError;
-use crate::packet::{Packet, PacketType};
+use crate::packet::{MsgType, Packet, RconReq, RconResp, MAX_CMD_SIZE};
 
 pub struct Connection {
     stream: TcpStream,
@@ -20,12 +20,12 @@ impl Connection {
         // Note: A server responds with an empty `ResponseValue` followed by an `AuthResponse`.
         // The server uses the `AuthResponse` packet ID as status code, so the response ID should
         // be paired with the `ResponseValue` packet.
-        self.send(PacketType::Auth, password)?;
+        self.send(RconReq::Auth, password)?;
 
         // Receive `AuthResponse`.
         let auth_response = loop {
             let r = Packet::deserialize(&mut self.stream)?;
-            if r.ptype == PacketType::AuthResponse {
+            if r.ptype == MsgType::Response(RconResp::AuthResponse) {
                 break r;
             }
         };
@@ -39,16 +39,22 @@ impl Connection {
     }
 
     pub fn exec(&mut self, cmd: &str) -> Result<String, RconError> {
-        // Note: A server responds with one or more `ResponseValue`.
-        // The max packet size is 4096 (default), but may differ between game servers.
-        self.send(PacketType::ExecCommand, cmd)?;
+        // Note: The client-to-server max payload is sometimes limited; for
+        // Minecraft this is 1446 bytes.
+        if cmd.len() > MAX_CMD_SIZE {
+            return Err(RconError::CmdTooLong(cmd.len()));
+        }
+
+        // A server responds with one or more `ResponseValue`.
+        self.send(RconReq::ExecCommand, cmd)?;
         let response = self.recv_multi_packet_response()?;
+
         Ok(response)
     }
 
-    fn send(&mut self, ptype: PacketType, body: &str) -> Result<i32, RconError> {
+    fn send(&mut self, request: RconReq, body: &str) -> Result<i32, RconError> {
         let id = self.fetch_and_add_id();
-        let packet = Packet::new(id, ptype, body.into());
+        let packet = Packet::new(id, MsgType::Request(request), body.into())?;
         packet.serialize(&mut self.stream)?;
         Ok(id)
     }
@@ -58,7 +64,7 @@ impl Connection {
         // Since the server always responds to requests in the receiving order (FIFO), we
         // can detect the end of a multi-packet response when receiving the response to the
         // empty packet.
-        let end_id = self.send(PacketType::ExecCommand, "")?; // empty packet
+        let end_id = self.send(RconReq::ExecCommand, "")?; // empty packet
         let mut response = String::new();
         loop {
             let recv_packet = Packet::deserialize(&mut self.stream)?;
