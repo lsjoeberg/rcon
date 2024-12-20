@@ -23,9 +23,13 @@ struct Args {
     commands: Vec<String>,
 }
 
-fn main() -> Result<(), rcon::Error> {
-    let args = Args::parse();
+fn main() {
+    if let Err(e) = run(Args::parse()) {
+        eprintln!("error: {}", e.to_string());
+    }
+}
 
+fn run(args: Args) -> Result<(), rcon::Error> {
     let mut conn = rcon::Connection::connect((args.host.as_ref(), args.port), &args.password)?;
 
     if args.terminal {
