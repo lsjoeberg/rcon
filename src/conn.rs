@@ -6,12 +6,13 @@ use crate::packet::{
     ResType::{AuthResponse, ResponseValue},
     MAX_CMD_SIZE,
 };
+use std::io::BufReader;
 
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
 pub struct Connection {
-    stream: TcpStream,
+    stream: BufReader<TcpStream>,
     next_id: i32,
 }
 
@@ -27,7 +28,10 @@ impl Connection {
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
 
         // Create a new RCON connection.
-        let mut conn = Connection { stream, next_id: 0 };
+        let mut conn = Connection {
+            stream: BufReader::new(stream),
+            next_id: 0,
+        };
 
         // Attempt to authenticate the connection.
         conn.auth(password.as_ref())?;

@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::io::{Read, Write};
+use std::io::{BufReader, Read, Write};
 
 use crate::error::Error;
 
@@ -103,7 +103,10 @@ impl Packet {
         })
     }
 
-    pub fn serialize(&self, w: &mut impl Write) -> Result<(), Error> {
+    pub fn serialize<T>(&self, w: &mut BufReader<T>) -> Result<(), Error>
+    where
+        T: Write,
+    {
         // Ensure size is within spec.
         if !(MIN_PACKET_SIZE..=MAX_PACKET_SIZE).contains(&self.size) {
             return Err(Error::InvalidPacketSize(self.size));
@@ -120,7 +123,7 @@ impl Packet {
         buf.extend_from_slice(&ptype_raw.to_le_bytes());
         buf.extend_from_slice(self.body.as_bytes());
         buf.extend_from_slice(&[0x00, 0x00]); // empty string and null terminator
-        w.write_all(&buf)?;
+        w.get_mut().write_all(&buf)?;
         Ok(())
     }
 
@@ -211,11 +214,11 @@ mod tests {
         ];
         let p = Packet::new(1, MsgType::Request(ReqType::AuthRequest), "passwrd".into())
             .expect("password should fit in packet body");
-        let mut buf = Vec::new();
+        let mut buf = BufReader::new(Cursor::new(Vec::new()));
         p.serialize(&mut buf).unwrap();
-        print_buffer_hex(&buf);
+        print_buffer_hex(&buf.buffer());
 
-        assert_eq!(buf, expected);
+        assert_eq!(buf.into_inner().into_inner(), expected);
     }
 
     #[test]
@@ -230,9 +233,9 @@ mod tests {
         // Use a `Cursor` to fulfill the `Read` trait boundary on an array.
         let packet = Packet::deserialize(&mut Cursor::new(data)).unwrap();
 
-        let mut buf = Vec::new();
+        let mut buf = BufReader::new(Cursor::new(Vec::new()));
         expected.serialize(&mut buf).unwrap();
-        print_buffer_hex(&buf);
+        print_buffer_hex(&buf.buffer());
 
         assert_eq!(packet, expected);
     }
@@ -280,7 +283,7 @@ mod tests {
             ptype: MsgType::Request(ReqType::ExecCommand),
             body: "list".to_string(),
         };
-        let mut buf = Vec::new();
+        let mut buf = BufReader::new(Cursor::new(Vec::new()));
         let res = packet.serialize(&mut buf);
         assert!(res.is_err());
         let Err(Error::InvalidPacketSize(s)) = res else {
