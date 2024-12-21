@@ -1,5 +1,11 @@
 use crate::error::Error;
-use crate::packet::{MsgType, Packet, RconReq, RconResp, MAX_CMD_SIZE};
+use crate::packet::{
+    MsgType::{Request, Response},
+    Packet,
+    ReqType::{self, AuthRequest, ExecCommand},
+    ResType::{AuthResponse, ResponseValue},
+    MAX_CMD_SIZE,
+};
 
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
@@ -30,7 +36,7 @@ impl Connection {
     }
 
     fn auth(&mut self, password: &str) -> Result<(), Error> {
-        let auth_id = self.send(RconReq::Auth, password)?;
+        let auth_id = self.send(AuthRequest, password)?;
 
         // The protocol says that the server response to an Auth packet is:
         //   1. An empty ResponseValue with ID matching the Auth packet, followed by
@@ -42,13 +48,13 @@ impl Connection {
         let response = loop {
             let p = Packet::deserialize(&mut self.stream)?;
             match p.ptype {
-                MsgType::Response(RconResp::ResponseValue) => {
+                Response(ResponseValue) => {
                     // Received an empty ResponseValue, which should match the `auth_id`.
                     if p.body.is_empty() && p.id == auth_id {
                         break None; // indicate that we should next receive an AuthResponse
                     }
                 }
-                MsgType::Response(RconResp::AuthResponse) => {
+                Response(AuthResponse) => {
                     // No ResponseValue received with matching ID, just the AuthResponse.
                     break Some(p); // already received teh AuthResponse
                 }
@@ -62,7 +68,7 @@ impl Connection {
         };
 
         // Check if authentication was successful.
-        if auth_response.ptype != MsgType::Response(RconResp::AuthResponse) || auth_response.is_error() {
+        if auth_response.ptype != Response(AuthResponse) || auth_response.is_error() {
             return Err(Error::AuthFailure);
         }
 
@@ -80,15 +86,15 @@ impl Connection {
         }
 
         // A server responds with one or more `ResponseValue`.
-        self.send(RconReq::ExecCommand, cmd)?;
+        self.send(ExecCommand, cmd)?;
         let response = self.recv_multi_packet_response()?;
 
         Ok(response)
     }
 
-    fn send(&mut self, request: RconReq, body: &str) -> Result<i32, Error> {
+    fn send(&mut self, request: ReqType, body: &str) -> Result<i32, Error> {
         let id = self.fetch_and_add_id();
-        let packet = Packet::new(id, MsgType::Request(request), body.into())?;
+        let packet = Packet::new(id, Request(request), body.into())?;
         packet.serialize(&mut self.stream)?;
         Ok(id)
     }
@@ -98,7 +104,7 @@ impl Connection {
         // Since the server always responds to requests in the receiving order (FIFO), we
         // can detect the end of a multi-packet response when receiving the response to the
         // empty packet.
-        let end_id = self.send(RconReq::ExecCommand, "")?; // empty packet
+        let end_id = self.send(ExecCommand, "")?; // empty packet
         let mut response = String::new();
         loop {
             let recv_packet = Packet::deserialize(&mut self.stream)?;

@@ -11,40 +11,40 @@ pub const MAX_PAYLOAD_SIZE: usize = MAX_PACKET_SIZE - MIN_PACKET_SIZE;
 pub const MAX_CMD_SIZE: usize = 1446; // C->S
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum RconReq {
+pub enum ReqType {
     ExecCommand,
-    Auth,
+    AuthRequest,
     Unknown(i32),
 }
 
-impl From<i32> for RconReq {
+impl From<i32> for ReqType {
     fn from(value: i32) -> Self {
         match value {
             2 => Self::ExecCommand,
-            3 => Self::Auth,
+            3 => Self::AuthRequest,
             _ => Self::Unknown(value),
         }
     }
 }
 
-impl From<RconReq> for i32 {
-    fn from(value: RconReq) -> Self {
+impl From<ReqType> for i32 {
+    fn from(value: ReqType) -> Self {
         match value {
-            RconReq::ExecCommand => 2,
-            RconReq::Auth => 3,
-            RconReq::Unknown(v) => v,
+            ReqType::ExecCommand => 2,
+            ReqType::AuthRequest => 3,
+            ReqType::Unknown(v) => v,
         }
     }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum RconResp {
+pub enum ResType {
     ResponseValue,
     AuthResponse,
     Unknown(i32),
 }
 
-impl From<i32> for RconResp {
+impl From<i32> for ResType {
     fn from(value: i32) -> Self {
         match value {
             0 => Self::ResponseValue,
@@ -54,20 +54,20 @@ impl From<i32> for RconResp {
     }
 }
 
-impl From<RconResp> for i32 {
-    fn from(value: RconResp) -> Self {
+impl From<ResType> for i32 {
+    fn from(value: ResType) -> Self {
         match value {
-            RconResp::ResponseValue => 0,
-            RconResp::AuthResponse => 2,
-            RconResp::Unknown(v) => v,
+            ResType::ResponseValue => 0,
+            ResType::AuthResponse => 2,
+            ResType::Unknown(v) => v,
         }
     }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum MsgType {
-    Request(RconReq),
-    Response(RconResp),
+    Request(ReqType),
+    Response(ResType),
 }
 
 impl From<MsgType> for i32 {
@@ -167,7 +167,7 @@ impl Packet {
         Ok(Self {
             size,
             id,
-            ptype: MsgType::Response(RconResp::from(ptype_raw)),
+            ptype: MsgType::Response(ResType::from(ptype_raw)),
             body,
         })
     }
@@ -186,12 +186,12 @@ mod tests {
     #[test]
     fn new_packet() {
         let body = String::from("list");
-        let res = Packet::new(42, MsgType::Request(RconReq::ExecCommand), body.clone());
+        let res = Packet::new(42, MsgType::Request(ReqType::ExecCommand), body.clone());
         assert!(res.is_ok());
 
         let p = res.unwrap();
         assert_eq!(p.id, 42);
-        assert_eq!(p.ptype, MsgType::Request(RconReq::ExecCommand));
+        assert_eq!(p.ptype, MsgType::Request(ReqType::ExecCommand));
         assert_eq!(p.body, body);
         assert_eq!(p.size, MIN_PACKET_SIZE + body.len());
     }
@@ -199,7 +199,7 @@ mod tests {
     #[test]
     fn new_packet_too_long_body() {
         let body = String::from_utf8([0x61u8; MAX_PACKET_SIZE].into()).unwrap();
-        let res = Packet::new(42, MsgType::Request(RconReq::ExecCommand), body);
+        let res = Packet::new(42, MsgType::Request(ReqType::ExecCommand), body);
         assert!(res.is_err());
     }
 
@@ -209,7 +209,7 @@ mod tests {
         let expected = [
             17, 0, 0, 0, 1, 0, 0, 0, 3, 0, 0, 0, 112, 97, 115, 115, 119, 114, 100, 0, 0,
         ];
-        let p = Packet::new(1, MsgType::Request(RconReq::Auth), "passwrd".into())
+        let p = Packet::new(1, MsgType::Request(ReqType::AuthRequest), "passwrd".into())
             .expect("password should fit in packet body");
         let mut buf = Vec::new();
         p.serialize(&mut buf).unwrap();
@@ -221,7 +221,7 @@ mod tests {
     #[test]
     fn deserialize_auth_response() {
         // id == 0 in AuthResponse indicates authn success
-        let expected = Packet::new(0, MsgType::Response(RconResp::AuthResponse), String::new())
+        let expected = Packet::new(0, MsgType::Response(ResType::AuthResponse), String::new())
             .expect("empty string should fit in packet body");
 
         // size = 10, id = 0, ptype = 2, body = "", \0\0
@@ -277,7 +277,7 @@ mod tests {
         let packet = Packet {
             size: usize::MAX,
             id: 0,
-            ptype: MsgType::Request(RconReq::ExecCommand),
+            ptype: MsgType::Request(ReqType::ExecCommand),
             body: "list".to_string(),
         };
         let mut buf = Vec::new();
