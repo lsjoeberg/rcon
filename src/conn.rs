@@ -30,21 +30,39 @@ impl Connection {
     }
 
     fn auth(&mut self, password: &str) -> Result<(), Error> {
-        // Note: A server responds with an empty `ResponseValue` followed by an `AuthResponse`.
-        // The server uses the `AuthResponse` packet ID as status code, so the response ID should
-        // be paired with the `ResponseValue` packet.
-        self.send(RconReq::Auth, password)?;
+        let auth_id = self.send(RconReq::Auth, password)?;
 
-        // Receive `AuthResponse`.
-        let auth_response = loop {
-            let r = Packet::deserialize(&mut self.stream)?;
-            if r.ptype == MsgType::Response(RconResp::AuthResponse) {
-                break r;
+        // The protocol says that the server response to an Auth packet is:
+        //   1. An empty ResponseValue with ID matching the Auth packet, followed by
+        //   2. An AuthResponse, which ID indicate authentication success/failure.
+        // However, some servers may still respond only with an AuthResponse.
+        // The implementation below will check the ID if a ResponseValue is received,
+        // but will also accept an AuthResponse upfront.
+
+        let response = loop {
+            let p = Packet::deserialize(&mut self.stream)?;
+            match p.ptype {
+                MsgType::Response(RconResp::ResponseValue) => {
+                    // Received an empty ResponseValue, which should match the `auth_id`.
+                    if p.body.is_empty() && p.id == auth_id {
+                        break None; // indicate that we should next receive an AuthResponse
+                    }
+                }
+                MsgType::Response(RconResp::AuthResponse) => {
+                    // No ResponseValue received with matching ID, just the AuthResponse.
+                    break Some(p); // already received teh AuthResponse
+                }
+                _ => {}
             }
         };
 
+        let auth_response = match response {
+            Some(p) => p,
+            None => Packet::deserialize(&mut self.stream)?, // receive next packet as AuthResponse
+        };
+
         // Check if authentication was successful.
-        if auth_response.is_error() {
+        if auth_response.ptype != MsgType::Response(RconResp::AuthResponse) || auth_response.is_error() {
             return Err(Error::AuthFailure);
         }
 
