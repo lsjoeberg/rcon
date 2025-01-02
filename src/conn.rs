@@ -10,6 +10,20 @@ use crate::packet::{
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::Duration;
 
+/// Indicates the resolution of an authentication handshake with the RCON
+/// server. The RCON protocol specifies that an authentication request should
+/// be answered with two packets: one [`ResponseValue`] to match the specific
+/// request, and one [`AuthResponse`] to indicate the authentication result.
+/// Some servers may omit the [`ResponseValue`] and only send an
+/// [`AuthResponse`]. This could be considered unsafe.
+enum HandshakeStatus {
+    /// The handshake was matched to the specific authentication request.
+    Matched,
+    /// Only an [`AuthResponse`] was received from the server, not guaranteed
+    /// to be a response to the sent [`AuthRequest`].
+    BareAuthResponse,
+}
+
 pub struct Connection {
     stream: TcpStream,
     next_id: i32,
@@ -35,7 +49,7 @@ impl Connection {
         Ok(conn)
     }
 
-    fn auth(&mut self, password: &str) -> Result<(), Error> {
+    fn auth(&mut self, password: &str) -> Result<HandshakeStatus, Error> {
         let auth_id = self.send(AuthRequest, password)?;
 
         // The protocol says that the server response to an Auth packet is:
@@ -45,18 +59,18 @@ impl Connection {
         // The implementation below will check the ID if a ResponseValue is received,
         // but will also accept an AuthResponse upfront.
 
-        let response = loop {
+        let (response, status) = loop {
             let p = Packet::deserialize(&mut self.stream)?;
             match p.ptype {
                 Response(ResponseValue) => {
                     // Received an empty ResponseValue, which should match the `auth_id`.
                     if p.body.is_empty() && p.id == auth_id {
-                        break None; // indicate that we should next receive an AuthResponse
+                        break (None, HandshakeStatus::Matched);
                     }
                 }
                 Response(AuthResponse) => {
                     // No ResponseValue received with matching ID, just the AuthResponse.
-                    break Some(p); // already received teh AuthResponse
+                    break (Some(p), HandshakeStatus::BareAuthResponse);
                 }
                 _ => {}
             }
@@ -72,7 +86,7 @@ impl Connection {
             return Err(Error::AuthFailure);
         }
 
-        Ok(())
+        Ok(status)
     }
 
     /// # Errors
