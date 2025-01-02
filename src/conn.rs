@@ -32,16 +32,13 @@ pub struct Connection {
 impl Connection {
     /// # Errors
     /// Will return `Err` if a TCP connection cannot be established, or if authentication fails.
-    pub fn connect(
-        addr: impl ToSocketAddrs,
-        password: impl AsRef<str>,
-    ) -> Result<Connection, Error> {
+    pub fn connect(addr: impl ToSocketAddrs, password: impl AsRef<str>) -> Result<Self, Error> {
         // Create a TCP stream.
         let stream = TcpStream::connect(addr)?;
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
 
         // Create a new RCON connection.
-        let mut conn = Connection { stream, next_id: 0 };
+        let mut conn = Self { stream, next_id: 0 };
 
         // Attempt to authenticate the connection.
         conn.auth(password.as_ref())?;
