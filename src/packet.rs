@@ -172,7 +172,7 @@ impl Packet {
         })
     }
 
-    pub fn is_error(&self) -> bool {
+    pub const fn is_error(&self) -> bool {
         self.id < 0
     }
 }
