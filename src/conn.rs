@@ -59,6 +59,7 @@ impl Connection {
         // The implementation below will check the ID if a ResponseValue is received,
         // but will also accept an AuthResponse upfront.
 
+        let mut recv_counter: u8 = 0;
         let (response, status) = loop {
             let p = Packet::deserialize(&mut self.stream)?;
             match p.ptype {
@@ -67,12 +68,18 @@ impl Connection {
                     if p.body.is_empty() && p.id == auth_id {
                         break (None, HandshakeStatus::Matched);
                     }
+                    recv_counter += 1;
                 }
                 Response(AuthResponse) => {
                     // No ResponseValue received with matching ID, just the AuthResponse.
                     break (Some(p), HandshakeStatus::BareAuthResponse);
                 }
-                _ => {}
+                _ => recv_counter += 1,
+            }
+            if recv_counter > 10 {
+                return Err(Error::AuthFailure(
+                    "too many unexpected response packets".into(),
+                ));
             }
         };
 
@@ -83,7 +90,7 @@ impl Connection {
 
         // Check if authentication was successful.
         if auth_response.ptype != Response(AuthResponse) || auth_response.is_error() {
-            return Err(Error::AuthFailure);
+            return Err(Error::AuthFailure("invalid credentials".into()));
         }
 
         Ok(status)

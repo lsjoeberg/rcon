@@ -24,6 +24,6 @@ pub enum Error {
     )]
     InvalidPacketSize(usize),
 
-    #[error("authentication failed")]
-    AuthFailure,
+    #[error("authentication failed: {0}")]
+    AuthFailure(String),
 }
