@@ -10,7 +10,7 @@ pub const MAX_PACKET_SIZE: usize = 4096; // S->C
 pub const MAX_PAYLOAD_SIZE: usize = MAX_PACKET_SIZE - MIN_PACKET_SIZE;
 pub const MAX_CMD_SIZE: usize = 1446; // C->S
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ReqType {
     ExecCommand,
     AuthRequest,
@@ -37,7 +37,7 @@ impl From<ReqType> for i32 {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ResType {
     ResponseValue,
     AuthResponse,
@@ -64,7 +64,7 @@ impl From<ResType> for i32 {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum MsgType {
     Request(ReqType),
     Response(ResType),
@@ -79,7 +79,7 @@ impl From<MsgType> for i32 {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Packet {
     size: usize,
     pub id: i32,
